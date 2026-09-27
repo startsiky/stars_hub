@@ -5,7 +5,11 @@
   const $$ = (selector, scope = document) => Array.from(scope.querySelectorAll(selector));
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)');
+
   let toastTimer = 0;
+  let tapCount = 0;
+  let isTransforming = false;
+  let isRevealed = false;
 
   function isValidTelegramUrl(value) {
     if (typeof value !== 'string') return false;
@@ -13,7 +17,9 @@
     if (!url || url.includes('...')) return false;
     try {
       const parsed = new URL(url);
-      return parsed.protocol === 'https:' && (parsed.hostname === 't.me' || parsed.hostname.endsWith('.t.me')) && parsed.pathname.length > 1;
+      return parsed.protocol === 'https:' &&
+        (parsed.hostname === 't.me' || parsed.hostname.endsWith('.t.me')) &&
+        parsed.pathname.length > 1;
     } catch {
       return false;
     }
@@ -40,8 +46,7 @@
   }
 
   function openProject(projectKey) {
-    const links = window.PROJECT_LINKS || {};
-    const url = links[projectKey];
+    const url = (window.PROJECT_LINKS || {})[projectKey];
     if (!isValidTelegramUrl(url)) {
       invalidFeedback(projectKey);
       return;
@@ -57,64 +62,238 @@
 
   function initLoader() {
     const loader = $('[data-loader]');
-    const minimum = reduceMotion.matches ? 120 : 980;
-    const maximum = reduceMotion.matches ? 260 : 1400;
-    const started = performance.now();
-    let finished = false;
+    const minimum = reduceMotion.matches ? 120 : 960;
+    const maximum = reduceMotion.matches ? 220 : 1380;
+    const startedAt = performance.now();
+    let done = false;
 
     const reveal = () => {
-      if (finished) return;
-      finished = true;
-      const elapsed = performance.now() - started;
-      const wait = Math.max(0, minimum - elapsed);
+      if (done) return;
+      done = true;
+      const wait = Math.max(0, minimum - (performance.now() - startedAt));
       window.setTimeout(() => {
         document.body.classList.remove('is-loading');
         document.body.classList.add('is-ready');
-        $$('[data-star-image]').forEach((img) => {
-          img.addEventListener('error', () => img.hidden = true, { once: true });
-          if (img.complete && img.naturalWidth === 0) img.hidden = true;
-        });
-        window.setTimeout(() => loader?.setAttribute('aria-hidden', 'true'), 560);
+        window.setTimeout(() => {
+          loader?.setAttribute('aria-hidden', 'true');
+        }, reduceMotion.matches ? 140 : 620);
       }, wait);
     };
 
-    const maxTimer = window.setTimeout(reveal, maximum);
+    const hardStop = window.setTimeout(reveal, maximum);
     window.addEventListener('load', () => {
-      window.clearTimeout(maxTimer);
+      window.clearTimeout(hardStop);
       reveal();
     }, { once: true });
 
     if (document.readyState === 'complete') {
-      window.clearTimeout(maxTimer);
+      window.clearTimeout(hardStop);
       reveal();
     }
   }
 
-  function initIntroReveal() {
-    const run = () => $$('.reveal--intro').forEach((el) => el.classList.add('is-visible'));
-    if (document.body.classList.contains('is-ready')) run();
-    else window.setTimeout(run, reduceMotion.matches ? 0 : 1040);
+  function initAssetFallbacks() {
+    $$('[data-star-image]').forEach((img) => {
+      const hide = () => { img.hidden = true; };
+      img.addEventListener('error', hide, { once: true });
+      if (img.complete && img.naturalWidth === 0) hide();
+    });
+
+    $$('[data-project-image]').forEach((img) => {
+      const media = img.closest('[data-project-media]');
+      const markMissing = () => media?.classList.add('is-missing');
+      img.addEventListener('error', markMissing, { once: true });
+      if (img.complete && img.naturalWidth === 0) markMissing();
+    });
   }
 
-  function initIntersectionReveal() {
-    const items = $$('[data-reveal]');
-    if (!items.length) return;
-    if (reduceMotion.matches || !('IntersectionObserver' in window)) {
-      items.forEach((el) => el.classList.add('is-visible'));
+  function updateInstruction(text, highlightWord = '') {
+    const el = $('[data-tap-instruction]');
+    if (!el) return;
+    el.classList.add('is-changing');
+    window.setTimeout(() => {
+      if (highlightWord && text.includes(highlightWord)) {
+        const [before, after] = text.split(highlightWord);
+        el.replaceChildren(
+          document.createTextNode(before),
+          Object.assign(document.createElement('span'), { textContent: highlightWord }),
+          document.createTextNode(after || '')
+        );
+      } else {
+        el.textContent = text;
+      }
+      el.classList.remove('is-changing');
+    }, reduceMotion.matches ? 0 : 150);
+  }
+
+  function updateTapProgress() {
+    const progress = $('[data-tap-progress]');
+    if (!progress) return;
+    $$('i', progress).forEach((item, index) => item.classList.toggle('is-active', index < tapCount));
+    progress.setAttribute('aria-label', `Прогресс: ${tapCount} из 3`);
+  }
+
+  function createShockwave(rect, strength = 1) {
+    if (reduceMotion.matches) return;
+    const wave = document.createElement('i');
+    wave.className = 'tap-shockwave';
+    const size = Math.min(390, Math.max(rect.width, rect.height) * (1.25 + strength * .18));
+    wave.style.width = `${size}px`;
+    wave.style.height = `${size}px`;
+    wave.style.left = `${rect.left + rect.width / 2}px`;
+    wave.style.top = `${rect.top + rect.height / 2}px`;
+    document.body.appendChild(wave);
+    wave.addEventListener('animationend', () => wave.remove(), { once: true });
+  }
+
+  function createTapParticles(rect, count, strength) {
+    if (reduceMotion.matches || isRevealed) return;
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const fragment = document.createDocumentFragment();
+
+    for (let i = 0; i < count; i += 1) {
+      const angle = (Math.PI * 2 * i) / count + (Math.random() - .5) * .32;
+      const distance = (48 + Math.random() * 42) * strength;
+      const particle = document.createElement('i');
+      const useStar = i % 4 === 0;
+      particle.className = `tap-burst-particle${useStar ? ' is-star' : ''}`;
+      particle.style.setProperty('--sx', `${cx}px`);
+      particle.style.setProperty('--sy', `${cy}px`);
+      particle.style.setProperty('--dx', `${Math.cos(angle) * distance}px`);
+      particle.style.setProperty('--dy', `${Math.sin(angle) * distance}px`);
+      particle.style.setProperty('--rot', `${(Math.random() > .5 ? 1 : -1) * (40 + Math.random() * 90)}deg`);
+      particle.style.setProperty('--size', `${useStar ? 10 + Math.random() * 5 : 4 + Math.random() * 4}px`);
+      particle.style.setProperty('--life', `${470 + Math.random() * 160}ms`);
+      if (useStar) {
+        const image = document.createElement('img');
+        image.src = './tgstar.webp';
+        image.alt = '';
+        particle.appendChild(image);
+      }
+      fragment.appendChild(particle);
+      particle.addEventListener('animationend', () => particle.remove(), { once: true });
+    }
+
+    document.body.appendChild(fragment);
+  }
+
+  function playTapFeedback(level) {
+    const stage = $('[data-tap-stage]');
+    const button = $('[data-tap-star]');
+    if (!stage || !button) return;
+    const rect = button.getBoundingClientRect();
+
+    stage.classList.remove('is-tapped-1', 'is-tapped-2');
+    void stage.offsetWidth;
+    if (level < 3) stage.classList.add(`is-tapped-${level}`);
+
+    createTapParticles(rect, level === 1 ? 7 : 9, level === 1 ? .9 : 1.15);
+    createShockwave(rect, level);
+  }
+
+  function makeMorphGhost(sourceRect) {
+    const ghost = document.createElement('img');
+    ghost.src = './tgstar.webp';
+    ghost.alt = '';
+    ghost.className = 'morph-ghost';
+    ghost.style.width = `${sourceRect.width}px`;
+    ghost.style.height = `${sourceRect.height}px`;
+    ghost.style.transform = `translate3d(${sourceRect.left}px,${sourceRect.top}px,0)`;
+    document.body.appendChild(ghost);
+    return ghost;
+  }
+
+  function revealProjectsReduced() {
+    document.body.classList.add('is-transforming', 'is-revealed');
+    isRevealed = true;
+    window.setTimeout(() => document.body.classList.remove('is-transforming'), 30);
+  }
+
+  function runFinalTransformation() {
+    if (isTransforming || isRevealed) return;
+    isTransforming = true;
+
+    const stage = $('[data-tap-stage]');
+    const button = $('[data-tap-star]');
+    const target = $('[data-morph-target]');
+    if (!stage || !button || !target) {
+      revealProjectsReduced();
+      isTransforming = false;
       return;
     }
-    const observer = new IntersectionObserver((entries, obs) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        entry.target.classList.add('is-visible');
-        obs.unobserve(entry.target);
+
+    updateInstruction('Готово');
+    stage.classList.add('is-final-burst');
+    document.body.classList.add('is-transforming', 'is-morph-flash');
+
+    const sourceRect = button.getBoundingClientRect();
+    playTapFeedback(3);
+    createTapParticles(sourceRect, 12, 1.38);
+    createShockwave(sourceRect, 3);
+
+    if (reduceMotion.matches) {
+      revealProjectsReduced();
+      isTransforming = false;
+      return;
+    }
+
+    const ghost = makeMorphGhost(sourceRect);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const targetRect = target.getBoundingClientRect();
+        const sx = targetRect.width / sourceRect.width;
+        const sy = targetRect.height / sourceRect.height;
+        const dx = targetRect.left - sourceRect.left;
+        const dy = targetRect.top - sourceRect.top;
+        ghost.classList.add('is-moving');
+        ghost.style.transform = `translate3d(${sourceRect.left + dx}px,${sourceRect.top + dy}px,0) scale(${sx},${sy}) rotate(12deg)`;
+        ghost.style.opacity = '.12';
       });
-    }, { threshold: 0.14, rootMargin: '0px 0px -8% 0px' });
-    items.forEach((el) => observer.observe(el));
+    });
+
+    window.setTimeout(() => {
+      document.body.classList.add('is-revealed');
+      document.body.classList.remove('is-morph-flash');
+      isRevealed = true;
+    }, 540);
+
+    window.setTimeout(() => {
+      ghost.remove();
+      stage.classList.remove('is-final-burst');
+      document.body.classList.remove('is-transforming');
+      isTransforming = false;
+    }, 980);
+  }
+
+  function handleStarTap() {
+    if (isTransforming || isRevealed || tapCount >= 3) return;
+    tapCount += 1;
+    updateTapProgress();
+
+    if (tapCount === 1) {
+      playTapFeedback(1);
+      updateInstruction('Да! Ещё раз', 'Ещё');
+      return;
+    }
+
+    if (tapCount === 2) {
+      playTapFeedback(2);
+      updateInstruction('Последний тап', 'тап');
+      return;
+    }
+
+    runFinalTransformation();
+  }
+
+  function initTapMechanic() {
+    const star = $('[data-tap-star]');
+    if (!star) return;
+    star.addEventListener('click', handleStarTap);
   }
 
   function initRipple() {
-    $$('.cta').forEach((button) => {
+    $$('.project-cta').forEach((button) => {
       button.addEventListener('pointerdown', (event) => {
         if (reduceMotion.matches) return;
         const rect = button.getBoundingClientRect();
@@ -131,33 +310,23 @@
     });
   }
 
-  function initScrollProgress() {
-    const bar = $('.scroll-progress span');
-    const header = $('[data-header]');
-    if (!bar && !header) return;
-    let raf = 0;
-    const update = () => {
-      raf = 0;
-      const y = window.scrollY || document.documentElement.scrollTop;
-      const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-      if (bar) bar.style.transform = `scaleX(${Math.min(1, Math.max(0, y / max))})`;
-      header?.classList.toggle('is-scrolled', y > 12);
-    };
-    const request = () => {
-      if (!raf) raf = window.requestAnimationFrame(update);
-    };
-    window.addEventListener('scroll', request, { passive: true });
-    window.addEventListener('resize', request, { passive: true });
-    update();
-  }
+  function initCardReveal() {
+    const cards = $$('[data-reveal-card]');
+    if (!cards.length) return;
+    if (reduceMotion.matches || !('IntersectionObserver' in window)) {
+      cards.forEach((card) => card.classList.add('is-visible'));
+      return;
+    }
 
-  function initQuickChoice() {
-    $$('[data-scroll-project]').forEach((button) => {
-      button.addEventListener('click', () => {
-        const card = document.querySelector(`[data-project-card="${button.dataset.scrollProject}"]`);
-        card?.scrollIntoView({ behavior: reduceMotion.matches ? 'auto' : 'smooth', block: 'center' });
+    const observer = new IntersectionObserver((entries, obs) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add('is-visible');
+        obs.unobserve(entry.target);
       });
-    });
+    }, { threshold: .16, rootMargin: '0px 0px -6% 0px' });
+
+    cards.forEach((card) => observer.observe(card));
   }
 
   function initCardPointerEffects() {
@@ -165,6 +334,7 @@
     $$('[data-project-card]').forEach((card) => {
       let raf = 0;
       let lastEvent = null;
+
       const render = () => {
         raf = 0;
         if (!lastEvent) return;
@@ -175,29 +345,30 @@
         const ny = (y / rect.height - .5) * 2;
         card.style.setProperty('--glow-x', `${x}px`);
         card.style.setProperty('--glow-y', `${y}px`);
-        card.style.transform = `translateY(-4px) rotateX(${(-ny * 2.2).toFixed(2)}deg) rotateY(${(nx * 3.2).toFixed(2)}deg)`;
+        card.style.transform = `translateY(-3px) rotateX(${(-ny * 1.7).toFixed(2)}deg) rotateY(${(nx * 2.5).toFixed(2)}deg)`;
       };
+
       card.addEventListener('pointermove', (event) => {
         lastEvent = event;
-        if (!raf) raf = requestAnimationFrame(render);
+        if (!raf) raf = window.requestAnimationFrame(render);
       });
       card.addEventListener('pointerleave', () => {
         lastEvent = null;
         card.style.removeProperty('transform');
         card.style.setProperty('--glow-x', '50%');
-        card.style.setProperty('--glow-y', '50%');
+        card.style.setProperty('--glow-y', '20%');
       });
     });
   }
 
   function initMagneticButtons() {
     if (!finePointer.matches || reduceMotion.matches) return;
-    $$('.cta').forEach((button) => {
+    $$('.project-cta').forEach((button) => {
       button.addEventListener('pointermove', (event) => {
         const rect = button.getBoundingClientRect();
         const x = (event.clientX - rect.left - rect.width / 2) / rect.width;
         const y = (event.clientY - rect.top - rect.height / 2) / rect.height;
-        button.style.transform = `translate3d(${(x * 5).toFixed(2)}px, ${(y * 3).toFixed(2)}px, 0)`;
+        button.style.transform = `translate3d(${(x * 4).toFixed(2)}px,${(y * 2.5).toFixed(2)}px,0)`;
       });
       button.addEventListener('pointerleave', () => button.style.removeProperty('transform'));
     });
@@ -209,9 +380,10 @@
     let x = innerWidth / 2;
     let y = innerHeight / 3;
     window.addEventListener('pointermove', (event) => {
-      x = event.clientX; y = event.clientY;
+      x = event.clientX;
+      y = event.clientY;
       if (raf) return;
-      raf = requestAnimationFrame(() => {
+      raf = window.requestAnimationFrame(() => {
         raf = 0;
         document.documentElement.style.setProperty('--pointer-x', `${x}px`);
         document.documentElement.style.setProperty('--pointer-y', `${y}px`);
@@ -219,54 +391,21 @@
     }, { passive: true });
   }
 
-  function initHeroEasterEgg() {
-    const trigger = $('[data-hero-star]');
-    if (!trigger) return;
-    let locked = false;
-    const vectors = [[-48,-28],[-22,-52],[28,-50],[50,-20],[-50,24],[-16,52],[26,48],[52,18]];
-    trigger.addEventListener('click', () => {
-      if (locked || reduceMotion.matches) return;
-      locked = true;
-      trigger.classList.add('is-bursting');
-      vectors.slice(0, 6).forEach(([dx,dy], index) => {
-        const spark = document.createElement('i');
-        spark.className = 'hero-spark';
-        spark.style.setProperty('--dx', `${dx}px`);
-        spark.style.setProperty('--dy', `${dy}px`);
-        spark.style.animationDelay = `${index * 24}ms`;
-        trigger.appendChild(spark);
-        spark.addEventListener('animationend', () => spark.remove(), { once: true });
-      });
-      window.setTimeout(() => {
-        trigger.classList.remove('is-bursting');
-        locked = false;
-      }, 720);
-    });
-  }
-
-  function initStarFallbacks() {
-    $$('[data-star-image]').forEach((img) => {
-      const hide = () => { img.hidden = true; };
-      img.addEventListener('error', hide, { once: true });
-      if (img.complete && img.naturalWidth === 0) hide();
-    });
-  }
-
   function init() {
-    initStarFallbacks();
+    initAssetFallbacks();
     bindProjectLinks();
     initLoader();
-    initIntroReveal();
-    initIntersectionReveal();
+    initTapMechanic();
     initRipple();
-    initScrollProgress();
-    initQuickChoice();
+    initCardReveal();
     initCardPointerEffects();
     initMagneticButtons();
     initPointerGlow();
-    initHeroEasterEgg();
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
-  else init();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
 })();
