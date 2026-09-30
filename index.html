@@ -8,15 +8,14 @@
   <meta name="color-scheme" content="dark">
   <link rel="preload" as="image" href="./tgstar.webp" fetchpriority="high">
   <link rel="preload" as="image" href="./photo1.webp">
-  <link rel="preload" as="image" href="./photo2.webp">
 
   <!-- =========================================================
        TELEGRAM LINKS — CHANGE ONLY THESE VALUES
   ========================================================= -->
   <script>
     window.PROJECT_LINKS = {
-      starsRush: "https://t.me/Stars_Rush_tapBot?start=camp_dop_tt",
-      miner: "https://t.me/stars_miner_robot?start=camp_dop_tt"
+      starsRush: "https://t.me/...",
+      miner: "https://t.me/..."
     };
   </script>
 
@@ -43,8 +42,7 @@
       <span class="ambient__grid"></span>
       <span class="ambient__vignette"></span>
       <i class="ambient-dot d1"></i><i class="ambient-dot d2"></i><i class="ambient-dot d3"></i><i class="ambient-dot d4"></i>
-      <i class="ambient-dot d5"></i><i class="ambient-dot d6"></i><i class="ambient-dot d7"></i><i class="ambient-dot d8"></i>
-      <i class="ambient-dot d9"></i><i class="ambient-dot d10"></i>
+      <i class="ambient-dot d5"></i><i class="ambient-dot d6"></i>
     </div>
 
     <main class="page" id="top">
@@ -79,6 +77,18 @@
       </section>
 
       <section class="projects" data-projects aria-label="Telegram-проекты">
+        <header class="projects-header" data-projects-header>
+          <div class="projects-header__mark" aria-hidden="true">
+            <span></span>
+            <img src="./tgstar.webp" alt="" data-star-image>
+          </div>
+          <div>
+            <p class="projects-header__label">TELEGRAM STARS</p>
+            <h2>Выбери проект</h2>
+            <p class="projects-header__subtitle">Переходи в бот и получай звёзды</p>
+          </div>
+        </header>
+
         <div class="projects__inner">
           <article class="project-card project-card--rush" data-project-card="starsRush">
             <div class="project-card__glow" aria-hidden="true"></div>
@@ -88,7 +98,7 @@
             </div>
 
             <div class="project-card__media" data-project-media>
-              <img src="./photo1.webp" alt="Интерфейс проекта STARS RUSH" data-project-image>
+              <img src="./photo1.webp" alt="Интерфейс проекта STARS RUSH" decoding="async" data-project-image="starsRush">
               <div class="project-card__media-fallback" aria-hidden="true">
                 <img src="./tgstar.webp" alt="" data-star-image>
               </div>
@@ -135,7 +145,7 @@
             </div>
 
             <div class="project-card__media" data-project-media>
-              <img src="./photo2.webp" alt="Интерфейс проекта Майнер Звёзд" data-project-image>
+              <img src="./photo2.webp" alt="Интерфейс проекта Майнер Звёзд" loading="lazy" decoding="async" data-project-image="miner">
               <div class="project-card__media-fallback" aria-hidden="true">
                 <img src="./tgstar.webp" alt="" data-star-image>
               </div>
@@ -155,9 +165,13 @@
               <p class="project-card__tagline">Майни и получай звёзды</p>
               <p class="project-card__description">Запускай майнинг и постепенно собирай Telegram Stars.</p>
 
-              <div class="project-card__stats project-card__stats--single" aria-label="Статистика Майнера Звёзд">
+              <div class="project-card__stats" aria-label="Статистика Майнера Звёзд">
+                <div class="project-stat">
+                  <strong>10K+</strong>
+                  <span>пользователей</span>
+                </div>
                 <div class="project-stat project-stat--star">
-                  <strong>500+ <img src="./tgstar.webp" alt="Telegram Stars" data-star-image></strong>
+                  <strong>1K+ <img src="./tgstar.webp" alt="Telegram Stars" data-star-image></strong>
                   <span>выплаченных звёзд</span>
                 </div>
               </div>
@@ -176,6 +190,30 @@
       <img src="./tgstar.webp" alt="" data-star-image>
       <span>Выбирай проект и переходи в Telegram</span>
     </footer>
+  </div>
+
+  <div class="transition-layer" data-transition-layer aria-hidden="true">
+    <div class="transition-layer__flash" aria-hidden="true"></div>
+    <article class="transition-card" aria-hidden="true">
+      <div class="transition-card__media">
+        <img src="./photo1.webp" alt="" decoding="async" data-transition-image>
+        <span class="transition-card__shade"></span>
+        <span class="transition-card__index">01 / TAP</span>
+        <span class="transition-card__target" data-transition-target></span>
+      </div>
+      <div class="transition-card__content">
+        <p class="transition-card__eyebrow">Быстрый ритм</p>
+        <h2>STARS RUSH</h2>
+        <p class="transition-card__tagline">Тапай и получай звёзды</p>
+        <div class="transition-card__stats">
+          <span><strong>10K+</strong><small>пользователей</small></span>
+          <span><strong>20K+</strong><small>выплаченных звёзд</small></span>
+        </div>
+      </div>
+      <div class="transition-card__cta" data-transition-cta>
+        <span>Открыть в Telegram</span><span>→</span>
+      </div>
+    </article>
   </div>
 
   <div class="toast" role="status" aria-live="polite" data-toast></div>
